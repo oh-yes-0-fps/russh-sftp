@@ -8,4 +8,11 @@ pub struct Path {
     pub path: String,
 }
 
+pub type LStat = Path;
+pub type OpenDir = Path;
+pub type RmDir = Path;
+pub type RealPath = Path;
+pub type Stat = Path;
+pub type ReadLink = Path;
+
 impl_request_id!(Path);

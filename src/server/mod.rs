@@ -1,20 +1,26 @@
 mod handler;
 
+#[cfg(feature = "impls")]
+pub mod implementation;
+
 use bytes::Bytes;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub use self::handler::Handler;
-
 use crate::{
     error::Error,
-    protocol::{Packet, StatusCode},
+    protocol::{Packet, RequestId, StatusCode},
 };
 
-macro_rules! into_wrap {
-    ($id:expr, $handler:expr, $var:ident; $($arg:ident),*) => {
-        match $handler.$var($($var.$arg),*).await {
-            Err(err) => Packet::error($id, err.into()),
-            Ok(packet) => packet.into(),
+pub use self::handler::Handler;
+
+macro_rules! handler_call {
+    ($handler:expr, $var:ident) => {
+        {
+            let id = RequestId::get_request_id(&$var);
+            match $handler.$var($var).await {
+                Err(err) => Packet::error(id, err.into()),
+                Ok(packet) => packet.into(),
+            }
         }
     };
 }
@@ -31,38 +37,36 @@ where
     Ok(Bytes::from(buf))
 }
 
-async fn process_request<H>(packet: Packet, handler: &mut H) -> Packet
+async fn exec_request<H>(packet: Packet, processor: &mut H) -> Packet
 where
     H: Handler + Send,
 {
-    let id = packet.get_request_id();
-
     match packet {
-        Packet::Init(init) => into_wrap!(id, handler, init; version, extensions),
-        Packet::Open(open) => into_wrap!(id, handler, open; id, filename, pflags, attrs),
-        Packet::Close(close) => into_wrap!(id, handler, close; id, handle),
-        Packet::Read(read) => into_wrap!(id, handler, read; id, handle, offset, len),
-        Packet::Write(write) => into_wrap!(id, handler, write; id, handle, offset, data),
-        Packet::Lstat(lstat) => into_wrap!(id, handler, lstat; id, path),
-        Packet::Fstat(fstat) => into_wrap!(id, handler, fstat; id, handle),
-        Packet::SetStat(setstat) => into_wrap!(id, handler, setstat; id, path, attrs),
-        Packet::FSetStat(fsetstat) => into_wrap!(id, handler, fsetstat; id, handle, attrs),
-        Packet::OpenDir(opendir) => into_wrap!(id, handler, opendir; id, path),
-        Packet::ReadDir(readdir) => into_wrap!(id, handler, readdir; id, handle),
-        Packet::Remove(remove) => into_wrap!(id, handler, remove; id, filename),
-        Packet::Mkdir(mkdir) => into_wrap!(id, handler, mkdir; id, path, attrs),
-        Packet::Rmdir(rmdir) => into_wrap!(id, handler, rmdir; id, path),
-        Packet::RealPath(realpath) => into_wrap!(id, handler, realpath; id, path),
-        Packet::Stat(stat) => into_wrap!(id, handler, stat; id, path),
-        Packet::Rename(rename) => into_wrap!(id, handler, rename; id, oldpath, newpath),
-        Packet::ReadLink(readlink) => into_wrap!(id, handler, readlink; id, path),
-        Packet::Symlink(symlink) => into_wrap!(id, handler, symlink; id, linkpath, targetpath),
-        Packet::Extended(extended) => into_wrap!(id, handler, extended; id, request, data),
-        _ => Packet::error(0, StatusCode::BadMessage)
+        Packet::Init(init) => handler_call!(processor, init),
+        Packet::Open(open) => handler_call!(processor, open),
+        Packet::Close(close) => handler_call!(processor, close),
+        Packet::Read(read) => handler_call!(processor, read),
+        Packet::Write(write) => handler_call!(processor, write),
+        Packet::LStat(lstat) => handler_call!(processor, lstat),
+        Packet::FStat(fstat) => handler_call!(processor, fstat),
+        Packet::SetStat(setstat) => handler_call!(processor, setstat),
+        Packet::FSetStat(fsetstat) => handler_call!(processor, fsetstat),
+        Packet::OpenDir(opendir) => handler_call!(processor, opendir),
+        Packet::ReadDir(readdir) => handler_call!(processor, readdir),
+        Packet::Remove(remove) => handler_call!(processor, remove),
+        Packet::MkDir(mkdir) => handler_call!(processor, mkdir),
+        Packet::RmDir(rmdir) => handler_call!(processor, rmdir),
+        Packet::RealPath(realpath) => handler_call!(processor, realpath),
+        Packet::Stat(stat) => handler_call!(processor, stat),
+        Packet::Rename(rename) => handler_call!(processor, rename),
+        Packet::ReadLink(readlink) => handler_call!(processor, readlink),
+        Packet::Symlink(symlink) => handler_call!(processor, symlink),
+        Packet::Extended(extended) => handler_call!(processor, extended),
+        _ => Packet::error(0, StatusCode::BadMessage),
     }
 }
 
-async fn process_handler<H, S>(stream: &mut S, handler: &mut H) -> Result<(), Error>
+async fn packet_processor<H, S>(stream: &mut S, handler: &mut H) -> Result<(), Error>
 where
     H: Handler + Send,
     S: AsyncRead + AsyncWrite + Unpin,
@@ -70,7 +74,7 @@ where
     let mut bytes = read_buf(stream).await?;
 
     let response = match Packet::try_from(&mut bytes) {
-        Ok(request) => process_request(request, handler).await,
+        Ok(request) => exec_request(request, handler).await,
         Err(_) => Packet::error(0, StatusCode::BadMessage),
     };
 
@@ -88,7 +92,7 @@ where
 {
     tokio::spawn(async move {
         loop {
-            match process_handler(&mut stream, &mut handler).await {
+            match packet_processor(&mut stream, &mut handler).await {
                 Err(Error::UnexpectedEof) => break,
                 Err(err) => warn!("{}", err),
                 Ok(_) => (),

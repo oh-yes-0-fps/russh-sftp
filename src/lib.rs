@@ -12,6 +12,7 @@ mod buf;
 pub mod client;
 mod de;
 mod error;
+mod sftp_fs;
 /// Protocol implementation
 pub mod protocol;
 mod ser;

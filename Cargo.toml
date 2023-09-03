@@ -11,7 +11,7 @@ keywords = ["russh", "sftp", "ssh2", "server", "client"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1", default-features = false, features = ["io-util", "rt"] }
+tokio = { version = "1", default-features = false, features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 bitflags = { version = "2.4", features = ["serde"] }
 
@@ -20,9 +20,15 @@ thiserror = "1.0"
 chrono = "0.4"
 bytes = "1.4"
 log = "0.4"
-
-[dev-dependencies]
 russh = "0.38"
 russh-keys = "0.38"
+tokio-stream = { version = "0.1.14", features = ["full"] }
+
+[dev-dependencies]
 env_logger = "0.10"
 anyhow = "1.0"
+
+[features]
+default = ["openssl", "impls"]
+openssl = ["russh/openssl", "russh-keys/openssl"]
+impls = []

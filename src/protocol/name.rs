@@ -17,6 +17,7 @@ impl_packet_for!(Name);
 #[derive(Debug, Deserialize)]
 pub struct File {
     pub filename: String,
+    pub longname: String,
     pub attrs: FileAttributes,
 }
 

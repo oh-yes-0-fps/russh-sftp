@@ -7,5 +7,9 @@ pub struct Handle {
     pub handle: String,
 }
 
+pub type Close = Handle;
+pub type FStat = Handle;
+pub type ReadDir = Handle;
+
 impl_request_id!(Handle);
 impl_packet_for!(Handle);

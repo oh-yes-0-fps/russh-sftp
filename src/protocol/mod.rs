@@ -17,30 +17,20 @@ mod symlink;
 mod version;
 mod write;
 
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::{buf::TryBuf, de, error::Error, ser};
 
-pub use self::{
-    attrs::Attrs,
-    data::Data,
-    extended::{Extended, ExtendedReply},
-    file_attrs::{FileAttr, FileAttributes, FileType},
-    handle::Handle,
-    handle_attrs::HandleAttrs,
-    init::Init,
-    name::{File, Name},
-    open::{Open, OpenFlags},
-    path::Path,
-    path_attrs::PathAttrs,
-    read::Read,
-    remove::Remove,
-    rename::Rename,
-    status::{Status, StatusCode},
-    symlink::Symlink,
-    version::Version,
-    write::Write,
-};
+pub mod types {
+    pub use self::{
+        super::attrs::*, super::data::*, super::extended::*, super::file_attrs::*,
+        super::handle::*, super::handle_attrs::*, super::init::*, super::name::*, super::open::*,
+        super::path::*, super::path_attrs::*, super::read::*, super::remove::*, super::rename::*,
+        super::symlink::*, super::version::*, super::write::*,
+    };
+}
+pub use status::{Status, StatusCode};
+use types::*;
 
 pub const VERSION: u32 = 3;
 
@@ -103,60 +93,60 @@ pub(crate) use impl_request_id;
 
 #[derive(Debug)]
 pub(crate) enum Packet {
-    Init(Init),
-    Version(Version),
-    Open(Open),
-    Close(Handle),
-    Read(Read),
-    Write(Write),
-    Lstat(Path),
-    Fstat(Handle),
-    SetStat(PathAttrs),
-    FSetStat(HandleAttrs),
-    OpenDir(Path),
-    ReadDir(Handle),
-    Remove(Remove),
-    Mkdir(PathAttrs),
-    Rmdir(Path),
-    RealPath(Path),
-    Stat(Path),
-    Rename(Rename),
-    ReadLink(Path),
-    Symlink(Symlink),
-    Status(Status),
-    Handle(Handle),
-    Data(Data),
-    Name(Name),
     Attrs(Attrs),
+    Close(Close),
+    Data(Data),
     Extended(Extended),
     ExtendedReply(ExtendedReply),
+    FSetStat(FSetStat),
+    FStat(FStat),
+    Handle(Handle),
+    Init(Init),
+    LStat(LStat),
+    MkDir(MkDir),
+    Name(Name),
+    Open(Open),
+    OpenDir(OpenDir),
+    Read(Read),
+    ReadDir(ReadDir),
+    ReadLink(ReadLink),
+    RealPath(RealPath),
+    Remove(Remove),
+    Rename(Rename),
+    RmDir(RmDir),
+    SetStat(PathAttrs),
+    Stat(Stat),
+    Status(Status),
+    Symlink(Symlink),
+    Version(Version),
+    Write(Write),
 }
 
 impl Packet {
-    pub fn get_request_id(&self) -> u32 {
-        match self {
-            Self::Open(open) => open.get_request_id(),
-            Self::Close(close) => close.get_request_id(),
-            Self::Read(read) => read.get_request_id(),
-            Self::Write(write) => write.get_request_id(),
-            Self::Lstat(lstat) => lstat.get_request_id(),
-            Self::Fstat(fstat) => fstat.get_request_id(),
-            Self::SetStat(setstat) => setstat.get_request_id(),
-            Self::FSetStat(fsetstat) => fsetstat.get_request_id(),
-            Self::OpenDir(opendir) => opendir.get_request_id(),
-            Self::ReadDir(readdir) => readdir.get_request_id(),
-            Self::Remove(remove) => remove.get_request_id(),
-            Self::Mkdir(mkdir) => mkdir.get_request_id(),
-            Self::Rmdir(rmdir) => rmdir.get_request_id(),
-            Self::RealPath(realpath) => realpath.get_request_id(),
-            Self::Stat(stat) => stat.get_request_id(),
-            Self::Rename(rename) => rename.get_request_id(),
-            Self::ReadLink(readlink) => readlink.get_request_id(),
-            Self::Symlink(symlink) => symlink.get_request_id(),
-            Self::Extended(extended) => extended.get_request_id(),
-            _ => 0,
-        }
-    }
+    // pub fn get_request_id(&self) -> u32 {
+    //     match self {
+    //         Self::Open(open) => open.get_request_id(),
+    //         Self::Close(close) => close.get_request_id(),
+    //         Self::Read(read) => read.get_request_id(),
+    //         Self::Write(write) => write.get_request_id(),
+    //         Self::LStat(lstat) => lstat.get_request_id(),
+    //         Self::FStat(fstat) => fstat.get_request_id(),
+    //         Self::SetStat(setstat) => setstat.get_request_id(),
+    //         Self::FSetStat(fsetstat) => fsetstat.get_request_id(),
+    //         Self::OpenDir(opendir) => opendir.get_request_id(),
+    //         Self::ReadDir(readdir) => readdir.get_request_id(),
+    //         Self::Remove(remove) => remove.get_request_id(),
+    //         Self::MkDir(mkdir) => mkdir.get_request_id(),
+    //         Self::RmDir(rmdir) => rmdir.get_request_id(),
+    //         Self::RealPath(realpath) => realpath.get_request_id(),
+    //         Self::Stat(stat) => stat.get_request_id(),
+    //         Self::Rename(rename) => rename.get_request_id(),
+    //         Self::ReadLink(readlink) => readlink.get_request_id(),
+    //         Self::Symlink(symlink) => symlink.get_request_id(),
+    //         Self::Extended(extended) => extended.get_request_id(),
+    //         _ => 0,
+    //     }
+    // }
 
     pub fn status(id: u32, status_code: StatusCode, msg: &str, tag: &str) -> Self {
         Packet::Status(Status {
@@ -186,15 +176,15 @@ impl TryFrom<&mut Bytes> for Packet {
             SSH_FXP_CLOSE => Self::Close(de::from_bytes(bytes)?),
             SSH_FXP_READ => Self::Read(de::from_bytes(bytes)?),
             SSH_FXP_WRITE => Self::Write(de::from_bytes(bytes)?),
-            SSH_FXP_LSTAT => Self::Lstat(de::from_bytes(bytes)?),
-            SSH_FXP_FSTAT => Self::Fstat(de::from_bytes(bytes)?),
+            SSH_FXP_LSTAT => Self::LStat(de::from_bytes(bytes)?),
+            SSH_FXP_FSTAT => Self::FStat(de::from_bytes(bytes)?),
             SSH_FXP_SETSTAT => Self::SetStat(de::from_bytes(bytes)?),
             SSH_FXP_FSETSTAT => Self::FSetStat(de::from_bytes(bytes)?),
             SSH_FXP_OPENDIR => Self::OpenDir(de::from_bytes(bytes)?),
             SSH_FXP_READDIR => Self::ReadDir(de::from_bytes(bytes)?),
             SSH_FXP_REMOVE => Self::Remove(de::from_bytes(bytes)?),
-            SSH_FXP_MKDIR => Self::Mkdir(de::from_bytes(bytes)?),
-            SSH_FXP_RMDIR => Self::Rmdir(de::from_bytes(bytes)?),
+            SSH_FXP_MKDIR => Self::MkDir(de::from_bytes(bytes)?),
+            SSH_FXP_RMDIR => Self::RmDir(de::from_bytes(bytes)?),
             SSH_FXP_REALPATH => Self::RealPath(de::from_bytes(bytes)?),
             SSH_FXP_STAT => Self::Stat(de::from_bytes(bytes)?),
             SSH_FXP_RENAME => Self::Rename(de::from_bytes(bytes)?),
@@ -225,15 +215,15 @@ impl TryFrom<Packet> for Bytes {
             Packet::Close(close) => (SSH_FXP_CLOSE, ser::to_bytes(&close)?),
             Packet::Read(read) => (SSH_FXP_READ, ser::to_bytes(&read)?),
             Packet::Write(write) => (SSH_FXP_WRITE, ser::to_bytes(&write)?),
-            Packet::Lstat(stat) => (SSH_FXP_LSTAT, ser::to_bytes(&stat)?),
-            Packet::Fstat(stat) => (SSH_FXP_FSTAT, ser::to_bytes(&stat)?),
+            Packet::LStat(stat) => (SSH_FXP_LSTAT, ser::to_bytes(&stat)?),
+            Packet::FStat(stat) => (SSH_FXP_FSTAT, ser::to_bytes(&stat)?),
             Packet::SetStat(setstat) => (SSH_FXP_SETSTAT, ser::to_bytes(&setstat)?),
             Packet::FSetStat(setstat) => (SSH_FXP_FSETSTAT, ser::to_bytes(&setstat)?),
             Packet::OpenDir(opendir) => (SSH_FXP_OPENDIR, ser::to_bytes(&opendir)?),
             Packet::ReadDir(readdir) => (SSH_FXP_READDIR, ser::to_bytes(&readdir)?),
             Packet::Remove(remove) => (SSH_FXP_REMOVE, ser::to_bytes(&remove)?),
-            Packet::Mkdir(mkdir) => (SSH_FXP_MKDIR, ser::to_bytes(&mkdir)?),
-            Packet::Rmdir(rmdir) => (SSH_FXP_RMDIR, ser::to_bytes(&rmdir)?),
+            Packet::MkDir(mkdir) => (SSH_FXP_MKDIR, ser::to_bytes(&mkdir)?),
+            Packet::RmDir(rmdir) => (SSH_FXP_RMDIR, ser::to_bytes(&rmdir)?),
             Packet::RealPath(realpath) => (SSH_FXP_REALPATH, ser::to_bytes(&realpath)?),
             Packet::Stat(stat) => (SSH_FXP_STAT, ser::to_bytes(&stat)?),
             Packet::Rename(rename) => (SSH_FXP_RENAME, ser::to_bytes(&rename)?),
@@ -254,5 +244,33 @@ impl TryFrom<Packet> for Bytes {
         bytes.put_u8(r#type);
         bytes.put_slice(&payload);
         Ok(bytes.freeze())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_packet() {
+        let packet = Packet::Data(Data {
+            id: 1,
+            data: vec![1; 100],
+        });
+
+        let mut bytes = Bytes::try_from(packet).unwrap();
+
+        //remove the first 4 bytes because they are the length
+        bytes::Buf::advance(&mut bytes, 4);
+
+        let packet2 = Packet::try_from(&mut bytes).unwrap();
+
+        match packet2 {
+            Packet::Data(data) => {
+                assert_eq!(data.id, 1);
+                assert_eq!(data.data, vec![1; 100]);
+            }
+            _ => panic!("wrong packet type"),
+        }
     }
 }

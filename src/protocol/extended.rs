@@ -1,6 +1,6 @@
 use super::{impl_packet_for, impl_request_id, Packet, RequestId};
 
-/// Implementation for SSH_FXP_EXTENDED
+/// Implementation for [SSH_FXP_EXTENDED](crate::protocol::SSH_FXP_EXTENDED)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Extended {
     pub id: u32,
@@ -10,7 +10,7 @@ pub struct Extended {
 
 impl_request_id!(Extended);
 
-/// Implementation for SSH_FXP_EXTENDED_REPLY
+/// Implementation for [SSH_FXP_EXTENDED_REPLY](crate::protocol::SSH_FXP_EXTENDED_REPLY)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExtendedReply {
     pub id: u32,

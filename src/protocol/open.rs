@@ -15,6 +15,32 @@ bitflags! {
     }
 }
 
+impl OpenFlags {
+    pub fn read(&self) -> bool {
+        self.contains(OpenFlags::READ)
+    }
+
+    pub fn write(&self) -> bool {
+        self.contains(OpenFlags::WRITE)
+    }
+
+    pub fn append(&self) -> bool {
+        self.contains(OpenFlags::APPEND)
+    }
+
+    pub fn create(&self) -> bool {
+        self.contains(OpenFlags::CREATE)
+    }
+
+    pub fn truncate(&self) -> bool {
+        self.contains(OpenFlags::TRUNCATE)
+    }
+
+    pub fn exclude(&self) -> bool {
+        self.contains(OpenFlags::EXCLUDE)
+    }
+}
+
 /// Implementation for SSH_FXP_OPEN
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Open {
