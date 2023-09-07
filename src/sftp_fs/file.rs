@@ -1,6 +1,6 @@
 use std::{path::PathBuf,  pin::Pin, task::{Context, Poll}, io::{ErrorKind, Error, SeekFrom, Cursor}, sync::Arc};
 
-use tokio::{sync::mpsc::Sender, io::{AsyncWrite, AsyncRead, AsyncSeek, ReadBuf, self}, fs::File};
+use tokio::{sync::mpsc::Sender, io::{AsyncWrite, AsyncRead, AsyncSeek, ReadBuf, self, AsyncWriteExt}, fs::File};
 
 use crate::protocol::types::OpenFlags;
 
@@ -35,7 +35,7 @@ impl AsyncRead for RemoteFile {
             return Poll::Ready(Ok(()));
         }
 
-        let bytes = self.get_mut().bytes.unwrap().get_mut();
+        let bytes = self.get_mut().bytes.as_mut().unwrap().get_mut();
         let len = bytes.len();
         let cnt = std::cmp::min(len, buf.remaining());
         buf.put_slice(&bytes[..cnt]);
@@ -49,7 +49,7 @@ impl AsyncSeek for RemoteFile {
             return Ok(());
         }
 
-        let mut bytes = self.get_mut().bytes.unwrap();
+        let mut bytes = self.get_mut().bytes.as_mut().unwrap();
 
         let calc_pos = match position {
             SeekFrom::Start(pos) => pos as i64,
@@ -60,12 +60,12 @@ impl AsyncSeek for RemoteFile {
         Ok(())
     }
 
-    fn poll_complete(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<u64, Error>> {
+    fn poll_complete(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<u64, Error>> {
         if self.bytes.is_none() {
             return Poll::Ready(Ok(0));
         }
 
-        Poll::Ready(Ok(self.bytes.unwrap().position()))
+        Poll::Ready(Ok(self.bytes.as_mut().unwrap().position()))
     }
 }
 
@@ -131,10 +131,10 @@ impl SftpFile {
     }
 
     pub fn new_client_remote(path: PathBuf, flags: OpenFlags) -> Self {
-        let (sender, receiver) = tokio::sync::mpsc::channel(16);
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(16);
         let reff = Arc::new(());
         let out = Self {
-            path,
+            path: path.clone(),
             owner: Owner::ClientRemote(RemoteFile {
                 reference: reff.clone(),
                 sender,
@@ -149,13 +149,15 @@ impl SftpFile {
                 file.write_all(&data[..]).await.unwrap();
             }
         });
+
+        out
     }
 }
 
 impl SftpFile {
     pub async fn len(&self) -> usize {
         match &self.owner {
-            Owner::ClientRemote(file) => file.bytes.get_ref().len(),
+            Owner::ClientRemote(file) => file.bytes.as_ref().map(|bytes| bytes.get_ref().len()).unwrap_or(0),
             Owner::ClientLocal(file) => file.metadata().await.unwrap().len() as usize,
             Owner::Server(file) => file.metadata().await.unwrap().len() as usize,
         }

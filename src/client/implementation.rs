@@ -33,14 +33,14 @@ impl Handler for SftpClientHandleImpl {
         Ok(())
     }
 
-    async fn handle(&mut self, arg: Handle) -> Result<Status, Self::Error> {
-        let id = arg.id;
-        if let Some(packet) = self.outstanding_packets.lock().await.remove(&id) {
-            match packet {
-                Packet::Open(open) => {
+    // async fn handle(&mut self, arg: Handle) -> Result<Status, Self::Error> {
+    //     let id = arg.id;
+    //     if let Some(packet) = self.outstanding_packets.lock().await.remove(&id) {
+    //         match packet {
+    //             Packet::Open(open) => {
                     
-                }
-            }
-        }
-    }
+    //             }
+    //         }
+    //     }
+    // }
 }
