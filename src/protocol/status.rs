@@ -50,5 +50,16 @@ pub struct Status {
     pub language_tag: String,
 }
 
+impl Status {
+    pub fn new(id: u32, status_code: StatusCode, error_message: impl ToString) -> Self {
+        Self {
+            id,
+            status_code,
+            error_message: error_message.to_string(),
+            language_tag: "en-US".to_string(),
+        }
+    }
+}
+
 impl_request_id!(Status);
 impl_packet_for!(Status);

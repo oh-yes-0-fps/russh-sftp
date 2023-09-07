@@ -1,112 +1,91 @@
-use std::{error::Error, sync::Arc};
-
 use bytes::Bytes;
-use russh::client::Config;
-use russh_keys::key;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::protocol::{Packet, types::{Open, OpenFlags}};
+use crate::{
+    error::Error,
+    protocol::{Packet, RequestId, StatusCode}, handler_call,
+};
 
-pub mod handler;
-pub mod session;
 
-pub struct Client {}
+mod handler;
+pub use self::handler::Handler;
+#[cfg(feature = "impls")]
+pub mod implementation;
 
-#[async_trait::async_trait]
-impl russh::client::Handler for Client {
-    type Error = russh::Error;
 
-    async fn check_server_key(
-        self,
-        _server_public_key: &key::PublicKey,
-    ) -> Result<(Self, bool), Self::Error> {
-        Ok((self, true))
-    }
+async fn read_buf<S>(stream: &mut S) -> Result<Bytes, Error>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let length = stream.read_u32().await?;
+
+    let mut buf = vec![0; length as usize];
+    stream.read_exact(&mut buf).await?;
+
+    Ok(Bytes::from(buf))
 }
 
+async fn exec_response<H>(packet: Packet, processor: &mut H) -> Option<Packet>
+where
+    H: Handler + Send,
+{
+    Some(match packet {
+        Packet::Version(version) => {
+            let id = RequestId::get_request_id(&version);
+            match processor.version(version).await {
+                Err(err) => Packet::error(id, err.into()),
+                Ok(_) => return None,
+            }
+        }
+        Packet::Handle(handle) => handler_call!(processor, handle),
+        Packet::Data(data) => handler_call!(processor, data),
+        Packet::Name(name) => handler_call!(processor, name),
+        Packet::Attrs(attrs) => handler_call!(processor, attrs),
+        Packet::ExtendedReply(extended_reply) => handler_call!(processor, extended_reply),
+        _ => Packet::error(0, StatusCode::BadMessage),
+    })
+}
 
-pub async fn start_sftp_client(
-    host: &str,
-    port: u16,
-    username: &str,
-    password: &str,
-) -> Result<(), Box<dyn Error>> {
-    let client = Client {};
+async fn packet_processor<H, S>(stream: &mut S, handler: &mut H) -> Result<(), Error>
+where
+    H: Handler + Send,
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut bytes = read_buf(stream).await?;
 
-    let mut configs = Config::default();
-    configs.maximum_packet_size = 65535;
-    configs.window_size = 65535;
-
-    let configs = Arc::new(configs);
-
-    let mut handle = russh::client::connect(
-        configs,
-        (host, port),
-        client,
-    ).await?;
-
-    if !handle.authenticate_password(username, password).await? {
-        Err(russh::Error::NotAuthenticated)?;
+    let request = match Packet::try_from(&mut bytes) {
+        Ok(response) => exec_response(response, handler).await,
+        Err(e) => {
+            warn!("error: {:?}", e);
+            Some(Packet::error(0, StatusCode::BadMessage))
+        }
     };
 
-    let mut channel = handle.channel_open_session().await?;
-
-    // request sftp subsystem
-    channel.request_subsystem(false, "sftp").await?;
-
-    channel.wait().await;
-
-    let create_file = Packet::Open(
-        Open {
-            filename: "~/test.txt".to_string(),
-            pflags: OpenFlags::from_bits_retain(0x0000000a),
-            attrs: Default::default(),
-            id: 0,
-        }
-    );
-
-    #[cfg(test)]
-    {
-        
+    if request.is_none() {
+        return Ok(());
     }
 
-    let mut stream = channel.into_stream();
+    let packet = Bytes::try_from(request.unwrap())?;
+    stream.write_all(&packet).await?;
 
-    let mut bytes: Bytes = create_file.try_into().unwrap();
-    stream.write_all(&mut bytes).await.unwrap();
-    stream.flush().await.unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-    // let mut bytes = BytesMut::new();
-    // stream.read_buf(&mut bytes).await.unwrap();
-
-    // let packet = Packet::try_from(&mut bytes.freeze()).unwrap();
-    // info!("packet: {:?}", packet);
-
-    // info!("bytes: {:?}", bytes);
-    // stream.write_u8(0).await.unwrap();
     Ok(())
 }
 
-#[cfg(test)]
-mod test {
-    #[tokio::test]
-    async fn test_sftp() {
-        env_logger::
-            builder().
-            is_test(true).
-            filter_level(log::LevelFilter::Info).
-            init();
-        // use tokio::io::{AsyncRead, AsyncWrite};
+/// Run processing stream as SFTP
+pub async fn run<S, H>(mut stream: S, mut handler: H)
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    H: Handler + Send + 'static,
+{
+    tokio::spawn(async move {
+        loop {
+            match packet_processor(&mut stream, &mut handler).await {
+                Err(Error::UnexpectedEof) => break,
+                    Err(err) => warn!("{}", err),
+                    Ok(_) => (),
+            }
+        }
 
-        let host = "localhost";
-        let port = 2222;
-        let username: &str = "";
-        let password: &str = "";
-
-        super::start_sftp_client(host, port, username, password).await.unwrap();
-
-        // sftp.stream.
-    }
+        debug!("sftp stream ended");
+    });
 }

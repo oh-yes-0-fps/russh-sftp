@@ -20,13 +20,14 @@ thiserror = "1.0"
 chrono = "0.4"
 bytes = "1.4"
 log = "0.4"
-russh = "0.38"
-russh-keys = "0.38"
+russh = "^0"
 tokio-stream = { version = "0.1.14", features = ["full"] }
+
 
 [dev-dependencies]
 env_logger = "0.10"
 anyhow = "1.0"
+russh-keys = "0.38"
 
 [features]
 default = ["openssl", "impls"]

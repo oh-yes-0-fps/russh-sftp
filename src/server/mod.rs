@@ -8,22 +8,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
     error::Error,
-    protocol::{Packet, RequestId, StatusCode},
+    protocol::{Packet, RequestId, StatusCode}, handler_call,
 };
 
 pub use self::handler::Handler;
-
-macro_rules! handler_call {
-    ($handler:expr, $var:ident) => {
-        {
-            let id = RequestId::get_request_id(&$var);
-            match $handler.$var($var).await {
-                Err(err) => Packet::error(id, err.into()),
-                Ok(packet) => packet.into(),
-            }
-        }
-    };
-}
 
 async fn read_buf<S>(stream: &mut S) -> Result<Bytes, Error>
 where
@@ -75,7 +63,10 @@ where
 
     let response = match Packet::try_from(&mut bytes) {
         Ok(request) => exec_request(request, handler).await,
-        Err(_) => Packet::error(0, StatusCode::BadMessage),
+        Err(e) => {
+            warn!("error: {:?}", e);
+            Packet::error(0, StatusCode::BadMessage)
+        }
     };
 
     let packet = Bytes::try_from(response)?;

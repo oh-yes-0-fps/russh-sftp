@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{impl_packet_for, Packet, VERSION};
+use super::{impl_packet_for, Packet, VERSION, RequestId};
 
 /// Implementation for SSH_FXP_VERSION
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,5 +23,11 @@ impl Version {
 impl Default for Version {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl RequestId for Version {
+    fn get_request_id(&self) -> u32 {
+        0
     }
 }

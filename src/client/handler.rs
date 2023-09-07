@@ -26,7 +26,7 @@ pub trait Handler: Sized {
 
     /// Called on SSH_FXP_HANDLE
     #[allow(unused_variables)]
-    async fn handle(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
+    async fn handle(&mut self, arg: Handle) -> Result<Status, Self::Error> {
         Err(self.unimplemented())
     }
 
@@ -45,6 +45,12 @@ pub trait Handler: Sized {
     /// Called on SSH_FXP_ATTRS
     #[allow(unused_variables)]
     async fn attrs(&mut self, arg: Attrs) -> Result<Status, Self::Error> {
+        Err(self.unimplemented())
+    }
+
+    /// Called on SSH_FXP_EXTENDED_REPLY
+    #[allow(unused_variables)]
+    async fn extended_reply(&mut self, arg: ExtendedReply) -> Result<Status, Self::Error> {
         Err(self.unimplemented())
     }
 }
